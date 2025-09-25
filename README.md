@@ -1,16 +1,16 @@
-# floating_clock
+# 悬浮时间
 
-A new Flutter project.
+一个使用 Flutter 编写的简单应用，移动端可在其他应用之上显示一个可拖动的悬浮时钟。
 
-## Getting Started
+## 主要功能
 
-This project is a starting point for a Flutter application.
+- 精确显示当前时间到 10 毫秒（以百分秒 centisecond 显示，例如 `12:34:56.78`）。
+- 支持将时钟以悬浮窗形式显示在 Android 桌面及其他应用之上，可拖动与关闭。
+- 支持多源时间同步：系统时钟（System）和任意自定义 NTP 服务器。
+- 定期与 NTP 服务器同步并显示与系统时间的偏差（偏移量）。
+- 本地持久化用户添加的 NTP 服务器（使用 `shared_preferences`）。
 
-A few resources to get you started if this is your first Flutter project:
+## 支持的平台
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- Android：完整悬浮窗功能（通过原生前台 Service + 悬浮窗权限实现）。
+- 其它平台（iOS、桌面、web）：可以运行本应用并在界面中查看时间与管理 NTP 服务器，但悬浮窗功能目前仅在 Android 原生实现。

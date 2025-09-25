@@ -1,6 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Foreground service permission (for Android O and above) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Allow UDP/TCP network access for NTP queries from the Flutter layer -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Declare SYSTEM_ALERT_WINDOW to make overlay-related settings more discoverable
+         on some OEM devices / settings screens. This is a special permission and
+         still requires the user to grant it in system settings. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <application
-        android:label="floating_clock"
+        android:label="悬浮时间"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -30,6 +38,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Service that creates a floating overlay clock. Permission to draw over other apps
+             must be granted by the user in system settings. -->
+        <service
+            android:name=".FloatingClockService"
+            android:exported="false"
+            android:foregroundServiceType="shortService" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

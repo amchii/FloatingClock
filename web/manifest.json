@@ -1,6 +1,6 @@
 {
-    "name": "floating_clock",
-    "short_name": "floating_clock",
+    "name": "悬浮时间",
+    "short_name": "悬浮时间",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
