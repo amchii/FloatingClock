@@ -1,4 +1,4 @@
-name: Build APK on tag
+name: Build and Release APK on tag
 
 on:
   push:
@@ -6,10 +6,9 @@ on:
       - '*'
   workflow_dispatch:
 
-
 jobs:
   build:
-    name: Build APK and attach to release
+    name: Build APK
     runs-on: ubuntu-latest
     env:
       LANG: C.UTF-8
@@ -39,7 +38,6 @@ jobs:
       - name: Accept Android licenses
         run: |
           yes | sdkmanager --licenses
-
 
       - name: Decode signing keystore
         run: |
@@ -84,12 +82,28 @@ jobs:
         with:
           name: app-release-apk
           path: build/app/outputs/apk/release/
+          retention-days: 1  # 只保留1天，节省存储空间
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build  # 依赖build作业完成
+    if: github.event_name == 'push'  # 只在push事件（tag push）时运行
+    
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/app/outputs/apk/release/
 
       - name: Create GitHub release and upload APK
-        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref }}
+          tag_name: ${{ github.ref_name }}  # 使用ref_name获取纯净的tag名
+          name: Release ${{ github.ref_name }}
           files: build/app/outputs/apk/release/*.apk
+          # 可选：添加自动生成的发布说明
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
