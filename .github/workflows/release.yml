@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - '*'
+  workflow_dispatch:
+
 
 jobs:
   build:
@@ -28,12 +30,38 @@ jobs:
         with:
           channel: stable
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v2
+
       - name: Flutter pub get
         run: flutter pub get
+
+      - name: Accept Android licenses
+        run: |
+          yes | sdkmanager --licenses
+
 
       - name: Decode signing keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/android.jks
+          
+          # Verify keystore file
+          echo "Keystore file size: $(stat -c%s android/android.jks) bytes"
+          echo "Keystore file type: $(file android/android.jks)"
+          
+          # Verify keystore content (without exposing passwords)
+          if keytool -list -keystore android/android.jks -storepass "${{ secrets.KEYSTORE_PASSWORD }}" -alias "${{ secrets.KEY_ALIAS || 'key' }}"; then
+            echo "✓ Keystore verification successful"
+          else
+            echo "✗ Keystore verification failed"
+            echo "Possible issues:"
+            echo "- Wrong keystore password"
+            echo "- Wrong key alias"
+            echo "- Corrupted keystore file"
+            echo "- Base64 encoding issue"
+            exit 1
+          fi
+          
           echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
           echo "keyAlias=${{ secrets.KEY_ALIAS || 'key' }}" >> android/key.properties
@@ -45,7 +73,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
 
       - name: Build release APK
-        run: flutter build apk --release --no-shrink
+        run: flutter build apk --release --split-per-abi
 
       - name: Clean up sensitive files
         run: |
@@ -55,11 +83,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/apk/release/
 
       - name: Create GitHub release and upload APK
-        uses: softprops/action-gh-release@v1
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
         with:
-          files: build/app/outputs/flutter-apk/app-release.apk
+          tag_name: ${{ github.ref }}
+          files: build/app/outputs/apk/release/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
