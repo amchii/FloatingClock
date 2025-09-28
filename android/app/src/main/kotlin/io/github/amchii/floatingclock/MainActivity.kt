@@ -1,9 +1,13 @@
 package io.github.amchii.floatingclock
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import java.io.ByteArrayOutputStream
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -39,6 +43,40 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                     result.success(true)
+                }
+                "getAppVersion" -> {
+                    try {
+                        val pInfo = packageManager.getPackageInfo(packageName, 0)
+                        result.success(pInfo.versionName)
+                    } catch (e: Exception) {
+                        result.success(null)
+                    }
+                }
+                "getAppIcon" -> {
+                    try {
+                        val pm = packageManager
+                        val appInfo = pm.getApplicationInfo(packageName, 0)
+                        val drawable = pm.getApplicationIcon(appInfo)
+
+                        val bitmap: Bitmap = if (drawable is BitmapDrawable) {
+                            drawable.bitmap
+                        } else {
+                            val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 128
+                            val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 128
+                            val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                            val canvas = Canvas(bmp)
+                            drawable.setBounds(0, 0, canvas.width, canvas.height)
+                            drawable.draw(canvas)
+                            bmp
+                        }
+
+                        val stream = ByteArrayOutputStream()
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                        val bytes = stream.toByteArray()
+                        result.success(bytes)
+                    } catch (e: Exception) {
+                        result.error("UNAVAILABLE", "Icon not available", null)
+                    }
                 }
                 "startOverlay" -> {
                     if (!Settings.canDrawOverlays(this)) {

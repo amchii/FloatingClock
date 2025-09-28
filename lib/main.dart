@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'pages/about_page.dart';
 
 // Preset/source identifiers and defaults
 const String _presetNtpAliyun = 'ntp.aliyun.com';
@@ -750,7 +751,22 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('悬浮时间')),
+      appBar: AppBar(
+        title: const Text('悬浮时间'),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (v) {
+              if (v == 'about') {
+                Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const AboutPage()));
+              }
+            },
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(value: 'about', child: Text('关于')),
+            ],
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(12.0),
