@@ -5,14 +5,14 @@ import 'package:flutter/services.dart' show Clipboard, ClipboardData, MethodChan
 import 'package:url_launcher/url_launcher.dart';
 
 class AboutPage extends StatefulWidget {
-  const AboutPage({Key? key}) : super(key: key);
+  const AboutPage({super.key});
 
   @override
   State<AboutPage> createState() => _AboutPageState();
 }
 
 class _AboutPageState extends State<AboutPage> {
-  String _appName = '悬浮时间';
+  final String _appName = '悬浮时间';
   String _version = '';
   final String _repoUrl = 'https://github.com/amchii/FloatingClock';
   bool _loading = false;
@@ -59,22 +59,27 @@ class _AboutPageState extends State<AboutPage> {
   Future<void> _openRepo() async {
     final uri = Uri.parse(_repoUrl);
     try {
-      if (!await canLaunchUrl(uri)) {
+      final can = await canLaunchUrl(uri);
+      if (!can) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('无法打开链接')));
         return;
       }
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (_) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('无法打开链接')));
     }
   }
 
   void _copyRepo() {
-    Clipboard.setData(ClipboardData(text: _repoUrl));
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('仓库地址已复制到剪贴板')));
+    Clipboard.setData(ClipboardData(text: _repoUrl)).then((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('仓库地址已复制到剪贴板')));
+    });
   }
 
   @override

@@ -452,9 +452,13 @@ class _HomePageState extends State<HomePage> {
                       final off = await _queryNtpOffset(host,
                           attempts: 2,
                           timeout: const Duration(milliseconds: 800));
-                      // close progress dialog
-                      Navigator.of(ctx).pop();
+
+                      // If the state was disposed while awaiting, bail out.
                       if (!mounted) return;
+
+                      // close progress dialog
+                      Navigator.of(context, rootNavigator: true).pop();
+
                       if (off == null) {
                         // Don't add silently if the server failed — inform the user and keep the dialog open.
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -468,8 +472,10 @@ class _HomePageState extends State<HomePage> {
                         _sources.last.lastSync = DateTime.now();
                       });
                       _saveServers();
+
                       // close the add dialog now that we've confirmed the server works
-                      Navigator.of(ctx).pop();
+                      if (!mounted) return;
+                      Navigator.of(context).pop();
                     }
                   },
                   child: const Text('添加')),
@@ -523,9 +529,13 @@ class _HomePageState extends State<HomePage> {
                       final off = await _queryNtpOffset(host,
                           attempts: 2,
                           timeout: const Duration(milliseconds: 800));
-                      // close progress dialog
-                      Navigator.of(ctx).pop();
+
+                      // If the state was disposed while awaiting, bail out.
                       if (!mounted) return;
+
+                      // close progress dialog
+                      Navigator.of(context, rootNavigator: true).pop();
+
                       if (off == null) {
                         // Keep the edit dialog open and report the failure
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -542,7 +552,8 @@ class _HomePageState extends State<HomePage> {
                         }
                       });
                       _saveServers();
-                      Navigator.of(ctx).pop();
+                      if (!mounted) return;
+                      Navigator.of(context).pop();
                     }
                   },
                   child: const Text('保存')),
@@ -865,7 +876,6 @@ class _HomePageState extends State<HomePage> {
                                           onPressed: () async {
                                             final removed = _sources[index];
                                             final removedHost = removed.host;
-                                            final removedType = removed.type;
                                             setState(() {
                                               if (_selectedIndex == index) {
                                                 _selectedIndex = 0;
