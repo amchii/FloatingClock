@@ -1,16 +1,17 @@
 # 悬浮时间
 
-一个使用 Flutter 编写的简单应用，移动端可在其他应用之上显示一个可拖动的悬浮时钟。
+<p align="center">
+  <a href="./assets/screenshot1.jpg">
+    <img src="./assets/screenshot1_thumb.jpg" alt="App 界面预览" width="720" />
+  </a>
+</p>
 
-## 主要功能
+一个使用 Flutter 编写的轻量级应用，在 Android 上可将一个可拖动的时钟以悬浮窗形式显示在屏幕任意位置，支持多源时间同步与偏差显示。
 
-- 精确显示当前时间到 10 毫秒（以百分秒 centisecond 显示，例如 `12:34:56.78`）。
-- 支持将时钟以悬浮窗形式显示在 Android 桌面及其他应用之上，可拖动与关闭。
-- 支持多源时间同步：系统时钟（System）和任意自定义 NTP 服务器。
-- 定期与 NTP 服务器同步并显示与系统时间的偏差（偏移量）。
-- 本地持久化用户添加的 NTP 服务器（使用 `shared_preferences`）。
+**主要特性**
 
-## 支持的平台
-
-- Android：完整悬浮窗功能（通过原生前台 Service + 悬浮窗权限实现）。
-- 其它平台（iOS、桌面、web）：可以运行本应用并在界面中查看时间与管理 NTP 服务器，但悬浮窗功能目前仅在 Android 原生实现。
+- 精确显示到百分秒（centisecond，例如 `12:34:56.78`）。
+- 可在 Android 上以悬浮窗（Overlay）形式显示，可拖动、固定与关闭。
+- 支持多时间源（System、NTP、HTTP 等），并展示与系统时间的偏差（ms）。
+- 定期自动同步 NTP/HTTP 时间并保存最近同步记录。
+- 支持本地持久化用户添加的时间源（`shared_preferences`）。

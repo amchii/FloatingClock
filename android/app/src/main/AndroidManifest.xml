@@ -45,12 +45,23 @@
             android:exported="false"
             android:foregroundServiceType="shortService" />
     </application>
-    <!-- Required to query activities that can process text, see:
-         https://developer.android.com/training/package-visibility and
-         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+    <!-- Required to query other apps that can handle certain intents.
+         On Android 11+ (API 30+) package visibility restrictions limit the
+         results returned by PackageManager.queryIntentActivities(). The
+         `url_launcher` plugin queries for activities that can handle VIEW
+         intents for http/https URIs; declare them here so we can detect
+         available browsers and successfully open external links.
 
-         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+         Also keep the PROCESS_TEXT query used by Flutter's process text plugin. -->
     <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="http"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
