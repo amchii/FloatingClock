@@ -969,37 +969,15 @@ class _HomePageState extends State<HomePage> {
                                       }
                                     }
                                   }),
-                              title: Row(children: [
-                                Expanded(
-                                    child: Text(
-                                        s.isSystem
-                                            ? 'System'
-                                            : (s.alias.isNotEmpty
-                                                ? s.alias
-                                                : s.host),
-                                        style: const TextStyle(fontFeatures: [
-                                          FontFeature.tabularFigures()
-                                        ]))),
-                                const SizedBox(width: 8),
-                                // Small type badge to distinguish NTP vs HTTP
-                                Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                        color: s.type == TimeSourceType.ntp
-                                            ? Colors.blue.shade50
-                                            : (s.type == TimeSourceType.http
-                                                ? Colors.green.shade50
-                                                : Colors.grey.shade200),
-                                        borderRadius: BorderRadius.circular(6)),
-                                    child: Text(
-                                        s.type == TimeSourceType.ntp
-                                            ? 'NTP'
-                                            : (s.type == TimeSourceType.http
-                                                ? 'HTTP'
-                                                : 'SYS'),
-                                        style: const TextStyle(fontSize: 12))),
-                              ]),
+                              title: Text(
+                                  s.isSystem
+                                      ? 'System'
+                                      : (s.alias.isNotEmpty
+                                          ? s.alias
+                                          : s.host),
+                                  style: const TextStyle(fontFeatures: [
+                                    FontFeature.tabularFigures()
+                                  ])),
                               subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -1018,18 +996,22 @@ class _HomePageState extends State<HomePage> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     if (!s.isSystem)
-                                      Padding(
-                                          padding:
-                                              const EdgeInsets.only(right: 8.0),
-                                          child: Text(
-                                              _formatOffset(s.offsetMillis),
-                                              style: const TextStyle(
-                                                  fontSize: 12))),
+                                      SizedBox(
+                                        width: 60,
+                                        child: Text(
+                                            _formatOffset(s.offsetMillis),
+                                            textAlign: TextAlign.right,
+                                            style: const TextStyle(
+                                                fontSize: 12)),
+                                      ),
                                     if (s.type == TimeSourceType.ntp)
                                       IconButton(
                                           icon: const Icon(Icons.edit),
                                           onPressed: () =>
-                                              _editServerDialog(index)),
+                                              _editServerDialog(index))
+                                    else if (!s.isSystem)
+                                      // Empty space placeholder to align with NTP edit button
+                                      const SizedBox(width: 48),
                                     if (!s.isSystem)
                                       IconButton(
                                           icon: const Icon(Icons.delete),
@@ -1066,33 +1048,51 @@ class _HomePageState extends State<HomePage> {
                                       () {
                                         final link = _layerLinks.putIfAbsent(
                                             index, () => LayerLink());
-                                        return Padding(
-                                          padding:
-                                              const EdgeInsets.only(left: 8.0),
-                                          child: CompositedTransformTarget(
-                                            link: link,
-                                            child: Material(
-                                              color: Colors.transparent,
-                                              child: InkResponse(
-                                                radius: 18,
-                                                onTapDown: (details) =>
-                                                    _toggleSyncOverlay(
-                                                        index,
-                                                        link,
-                                                        details.globalPosition),
-                                                // provide a minimal hit area
-                                                child: const SizedBox(
-                                                  width: 20,
-                                                  height: 20,
-                                                  child: Icon(
-                                                      Icons.error_outline,
-                                                      size: 18),
-                                                ),
+                                        return CompositedTransformTarget(
+                                          link: link,
+                                          child: Material(
+                                            color: Colors.transparent,
+                                            child: InkResponse(
+                                              radius: 18,
+                                              onTapDown: (details) =>
+                                                  _toggleSyncOverlay(
+                                                      index,
+                                                      link,
+                                                      details.globalPosition),
+                                              // provide a minimal hit area
+                                              child: const SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child: Icon(
+                                                    Icons.error_outline,
+                                                    size: 18),
                                               ),
                                             ),
                                           ),
                                         );
-                                      }(),
+                                      }()
+                                    else if (!s.isSystem)
+                                      // Empty space placeholder for sync icon
+                                      const SizedBox(width: 20),
+                                    // Type badge moved to the far right
+                                    Container(
+                                        margin: const EdgeInsets.only(left: 8.0),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 4, vertical: 1),
+                                        decoration: BoxDecoration(
+                                            color: s.type == TimeSourceType.ntp
+                                                ? Colors.blue.shade50
+                                                : (s.type == TimeSourceType.http
+                                                    ? Colors.green.shade50
+                                                    : Colors.grey.shade200),
+                                            borderRadius: BorderRadius.circular(4)),
+                                        child: Text(
+                                            s.type == TimeSourceType.ntp
+                                                ? 'ntp'
+                                                : (s.type == TimeSourceType.http
+                                                    ? 'http'
+                                                    : 'sys'),
+                                            style: const TextStyle(fontSize: 9))),
                                   ]),
                               onTap: () {
                                 setState(() => _selectedIndex = index);
