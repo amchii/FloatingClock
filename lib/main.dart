@@ -957,6 +957,13 @@ class _HomePageState extends State<HomePage> {
                           separatorBuilder: (_, __) => const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final s = _sources[index];
+                            // Get text scale factor for responsive adjustments
+                            final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+                            // Scale down spacing when text is enlarged
+                            final scaleFactor = textScale > 1.2 ? 0.7 : (textScale > 1.0 ? 0.85 : 1.0);
+                            final iconSize = 20.0 * scaleFactor;
+                            final buttonPadding = 8.0 * scaleFactor;
+
                             return ListTile(
                               leading: Radio<int>(
                                   value: index,
@@ -975,9 +982,14 @@ class _HomePageState extends State<HomePage> {
                                       : (s.alias.isNotEmpty
                                           ? s.alias
                                           : s.host),
-                                  style: const TextStyle(fontFeatures: [
-                                    FontFeature.tabularFigures()
-                                  ])),
+                                  style: const TextStyle(
+                                    fontFeatures: [
+                                      FontFeature.tabularFigures()
+                                    ],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                              ),
                               subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -989,33 +1001,45 @@ class _HomePageState extends State<HomePage> {
                                         ],
                                       ),
                                       maxLines: 1,
-                                      overflow: TextOverflow.visible,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
+                                    // 偏移值移到第二行
+                                    if (!s.isSystem)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 2.0),
+                                        child: Text(
+                                          _formatOffset(s.offsetMillis),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ),
                                   ]),
                               trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    if (!s.isSystem)
-                                      SizedBox(
-                                        width: 60,
-                                        child: Text(
-                                            _formatOffset(s.offsetMillis),
-                                            textAlign: TextAlign.right,
-                                            style: const TextStyle(
-                                                fontSize: 12)),
-                                      ),
+                                    // 使用更紧凑的按钮设计
                                     if (s.type == TimeSourceType.ntp)
-                                      IconButton(
-                                          icon: const Icon(Icons.edit),
-                                          onPressed: () =>
-                                              _editServerDialog(index))
+                                      Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          borderRadius: BorderRadius.circular(20),
+                                          onTap: () => _editServerDialog(index),
+                                          child: Padding(
+                                            padding: EdgeInsets.all(buttonPadding),
+                                            child: Icon(Icons.edit, size: iconSize),
+                                          ),
+                                        ),
+                                      )
                                     else if (!s.isSystem)
-                                      // Empty space placeholder to align with NTP edit button
-                                      const SizedBox(width: 48),
+                                      SizedBox(width: iconSize + buttonPadding * 2),
                                     if (!s.isSystem)
-                                      IconButton(
-                                          icon: const Icon(Icons.delete),
-                                          onPressed: () async {
+                                      Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          borderRadius: BorderRadius.circular(20),
+                                          onTap: () async {
                                             final removed = _sources[index];
                                             final removedHost = removed.host;
                                             setState(() {
@@ -1042,8 +1066,14 @@ class _HomePageState extends State<HomePage> {
                                               _hiddenPresets.add(removedHost);
                                               await _saveHiddenPresets();
                                             }
-                                          }),
-                                    // 小的感叹号图标，点击后显示内联的最近同步时间（类似 tooltip，非弹窗）
+                                          },
+                                          child: Padding(
+                                            padding: EdgeInsets.all(buttonPadding),
+                                            child: Icon(Icons.delete, size: iconSize),
+                                          ),
+                                        ),
+                                      ),
+                                    // 同步时间图标
                                     if (!s.isSystem && s.lastSync != null)
                                       () {
                                         final link = _layerLinks.putIfAbsent(
@@ -1053,32 +1083,31 @@ class _HomePageState extends State<HomePage> {
                                           child: Material(
                                             color: Colors.transparent,
                                             child: InkResponse(
-                                              radius: 18,
+                                              radius: iconSize * 0.9,
                                               onTapDown: (details) =>
                                                   _toggleSyncOverlay(
                                                       index,
                                                       link,
                                                       details.globalPosition),
-                                              // provide a minimal hit area
-                                              child: const SizedBox(
-                                                width: 20,
-                                                height: 20,
+                                              child: SizedBox(
+                                                width: iconSize + buttonPadding * 2,
+                                                height: iconSize + buttonPadding * 2,
                                                 child: Icon(
                                                     Icons.error_outline,
-                                                    size: 18),
+                                                    size: iconSize * 0.9),
                                               ),
                                             ),
                                           ),
                                         );
                                       }()
                                     else if (!s.isSystem)
-                                      // Empty space placeholder for sync icon
-                                      const SizedBox(width: 20),
-                                    // Type badge moved to the far right
+                                      SizedBox(width: iconSize + buttonPadding * 2),
+                                    // 类型标签
                                     Container(
-                                        margin: const EdgeInsets.only(left: 8.0),
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 4, vertical: 1),
+                                        margin: EdgeInsets.only(left: 4.0 * scaleFactor),
+                                        padding: EdgeInsets.symmetric(
+                                            horizontal: 4 * scaleFactor,
+                                            vertical: 1 * scaleFactor),
                                         decoration: BoxDecoration(
                                             color: s.type == TimeSourceType.ntp
                                                 ? Colors.blue.shade50
@@ -1092,7 +1121,7 @@ class _HomePageState extends State<HomePage> {
                                                 : (s.type == TimeSourceType.http
                                                     ? 'http'
                                                     : 'sys'),
-                                            style: const TextStyle(fontSize: 9))),
+                                            style: TextStyle(fontSize: 9 * scaleFactor))),
                                   ]),
                               onTap: () {
                                 setState(() => _selectedIndex = index);
