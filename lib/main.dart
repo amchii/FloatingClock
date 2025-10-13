@@ -63,6 +63,13 @@ class _HomePageState extends State<HomePage> {
   // will clear entries from this set.
   Set<String> _hiddenPresets = <String>{};
   bool _overlayRunning = false;
+  // Overlay entry used to show an inline tooltip above other widgets (doesn't
+  // change layout height). Only one sync-tooltip is shown at a time.
+  OverlayEntry? _syncOverlayEntry;
+  int? _syncOverlayIndex;
+  // LayerLinks for each list item so the overlay tooltip can follow the
+  // item's position during scrolling.
+  final Map<int, LayerLink> _layerLinks = {};
 
   @override
   void initState() {
@@ -73,15 +80,19 @@ class _HomePageState extends State<HomePage> {
     // are present unless the user explicitly hid them.
     _loadSavedServers().then((_) {
       final presets = <TimeSource>[
-        TimeSource.ntp(_presetNtpAliyun, alias: _presetAliases[_presetNtpAliyun] ?? ''),
-        TimeSource.ntp(_presetNtpTencent, alias: _presetAliases[_presetNtpTencent] ?? ''),
+        TimeSource.ntp(_presetNtpAliyun,
+            alias: _presetAliases[_presetNtpAliyun] ?? ''),
+        TimeSource.ntp(_presetNtpTencent,
+            alias: _presetAliases[_presetNtpTencent] ?? ''),
         TimeSource.http(_presetHttpMeituan,
-            alias: _presetAliases[_presetHttpMeituan] ?? '', headers: _meituanDefaultHeaders),
+            alias: _presetAliases[_presetHttpMeituan] ?? '',
+            headers: _meituanDefaultHeaders),
       ];
 
       for (final preset in presets) {
         if (_hiddenPresets.contains(preset.host)) continue;
-        final exists = _sources.any((s) => s.host == preset.host && s.type == preset.type);
+        final exists =
+            _sources.any((s) => s.host == preset.host && s.type == preset.type);
         if (!exists) {
           setState(() => _sources.add(preset));
 
@@ -126,7 +137,122 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _uiTimer?.cancel();
     _syncTimer?.cancel();
+    // Ensure any overlay is removed
+    _removeSyncOverlay();
     super.dispose();
+  }
+
+  void _removeSyncOverlay() {
+    try {
+      _syncOverlayEntry?.remove();
+    } catch (_) {}
+    _syncOverlayEntry = null;
+    _syncOverlayIndex = null;
+  }
+
+  void _showSyncOverlay(int index, LayerLink link, [Offset? tapGlobalPos]) {
+    // Remove any existing overlay
+    _removeSyncOverlay();
+
+    final s = _sources[index];
+    final text = _formatLastSync(s.lastSync);
+
+    // Measure text to compute tooltip size
+    final tp = TextPainter(
+        text: TextSpan(text: text, style: const TextStyle(fontSize: 12)),
+        textDirection: Directionality.of(context))
+      ..layout(maxWidth: 260 - 16);
+    final textWidth = tp.width;
+    final textHeight = tp.height;
+
+    const horizontalPadding = 8.0;
+    const verticalPadding = 6.0;
+    final tooltipWidth = textWidth + horizontalPadding * 2;
+    final tooltipHeight = textHeight + verticalPadding * 2;
+
+    final mq = MediaQuery.of(context);
+    final screenWidth = mq.size.width;
+
+    // Compute desired left so tooltip is centered on the tap (if provided),
+    // and clamp to screen bounds.
+    final centerX = tapGlobalPos?.dx ?? (screenWidth / 2);
+    double left = centerX - tooltipWidth / 2;
+    left = left.clamp(8.0, screenWidth - tooltipWidth - 8.0);
+    const topOffset = 8.0;
+
+    // Compute follower offset so the follower's top center will be placed at
+    // target bottom center plus this offset; adjust horizontal offset so the
+    // tooltip left aligns with `left`.
+    final offsetX = left - (centerX - tooltipWidth / 2);
+
+    // Tooltip bounding rect (in global coordinates) for hit-testing. We
+    // approximate top by tap Y + topOffset if tap Y is available.
+    final top = (tapGlobalPos?.dy ?? 0) + topOffset;
+    final tooltipRect = Rect.fromLTWH(left, top, tooltipWidth, tooltipHeight);
+
+    _syncOverlayEntry = OverlayEntry(builder: (ctx) {
+      return Positioned.fill(
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (ev) {
+            // If pointer is outside the tooltip rect, remove the overlay but
+            // do not prevent the event from reaching underlying widgets.
+            if (!tooltipRect.contains(ev.position)) {
+              _removeSyncOverlay();
+              setState(() {});
+            }
+          },
+          child: Stack(children: [
+            CompositedTransformFollower(
+              link: link,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.bottomCenter,
+              followerAnchor: Alignment.topCenter,
+              offset: Offset(offsetX, topOffset),
+              child: Material(
+                color: Colors.transparent,
+                child: GestureDetector(
+                  onTap: () {},
+                  child: Container(
+                    constraints:
+                        const BoxConstraints(minWidth: 60, maxWidth: 260),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: horizontalPadding,
+                        vertical: verticalPadding),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade800,
+                      borderRadius: BorderRadius.circular(6),
+                      boxShadow: const [
+                        BoxShadow(
+                            color: Colors.black26,
+                            blurRadius: 6,
+                            offset: Offset(0, 2)),
+                      ],
+                    ),
+                    child: Text(text,
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 12)),
+                  ),
+                ),
+              ),
+            ),
+          ]),
+        ),
+      );
+    });
+
+    Overlay.of(context).insert(_syncOverlayEntry!);
+    _syncOverlayIndex = index;
+    setState(() {});
+  }
+
+  void _toggleSyncOverlay(int index, LayerLink link, [Offset? tapGlobalPos]) {
+    if (_syncOverlayIndex == index) {
+      _removeSyncOverlay();
+      setState(() {});
+      return;
+    }
+    _showSyncOverlay(index, link, tapGlobalPos);
   }
 
   Future<void> _syncAllServers() async {
@@ -568,6 +694,12 @@ class _HomePageState extends State<HomePage> {
     return '${_twoDigits(now.hour)}:${_twoDigits(now.minute)}:${_twoDigits(now.second)}.$centis';
   }
 
+  String _formatLastSync(DateTime? dt) {
+    if (dt == null) return '';
+    final d = dt.toLocal();
+    return '最近同步: ${d.year}-${_twoDigits(d.month)}-${_twoDigits(d.day)} ${_twoDigits(d.hour)}:${_twoDigits(d.minute)}:${_twoDigits(d.second)}';
+  }
+
   String _twoDigits(int n) => n.toString().padLeft(2, '0');
 
   String _formatOffset(int ms) {
@@ -600,7 +732,8 @@ class _HomePageState extends State<HomePage> {
                 _sources.add(TimeSource.http(m['host'] ?? '',
                     alias: m['alias'] ?? '', headers: headers));
               } else {
-                _sources.add(TimeSource.ntp(m['host'] ?? '', alias: m['alias'] ?? ''));
+                _sources.add(
+                    TimeSource.ntp(m['host'] ?? '', alias: m['alias'] ?? ''));
               }
             }
           });
@@ -616,7 +749,8 @@ class _HomePageState extends State<HomePage> {
             setState(() {
               for (final it in list) {
                 final m = it as Map<String, dynamic>;
-                _sources.add(TimeSource.ntp(m['host'] ?? '', alias: m['alias'] ?? ''));
+                _sources.add(
+                    TimeSource.ntp(m['host'] ?? '', alias: m['alias'] ?? ''));
               }
             });
           } catch (_) {}
@@ -667,7 +801,8 @@ class _HomePageState extends State<HomePage> {
   Future<void> _saveHiddenPresets() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      prefs.setString('hidden_presets_json', jsonEncode(_hiddenPresets.toList()));
+      prefs.setString(
+          'hidden_presets_json', jsonEncode(_hiddenPresets.toList()));
     } catch (e) {
       // ignore
     }
@@ -681,9 +816,15 @@ class _HomePageState extends State<HomePage> {
 
   void _restorePresetsDialog() {
     final missing = <String>[];
-    if (!_sources.any((s) => s.host == _presetNtpAliyun)) missing.add(_presetNtpAliyun);
-    if (!_sources.any((s) => s.host == _presetNtpTencent)) missing.add(_presetNtpTencent);
-    if (!_sources.any((s) => s.host == _presetHttpMeituan)) missing.add(_presetHttpMeituan);
+    if (!_sources.any((s) => s.host == _presetNtpAliyun)) {
+      missing.add(_presetNtpAliyun);
+    }
+    if (!_sources.any((s) => s.host == _presetNtpTencent)) {
+      missing.add(_presetNtpTencent);
+    }
+    if (!_sources.any((s) => s.host == _presetHttpMeituan)) {
+      missing.add(_presetHttpMeituan);
+    }
 
     if (missing.isEmpty) {
       ScaffoldMessenger.of(context)
@@ -691,32 +832,42 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    showDialog<void>(context: context, builder: (ctx) {
-      return AlertDialog(
-        title: const Text('恢复预设源'),
-        content: Text('将恢复以下预设: ${missing.map((h) => _presetAliases[h] ?? h).join(', ')}'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('取消')),
-          TextButton(onPressed: () {
-            Navigator.of(ctx).pop();
-            _restorePresets();
-          }, child: const Text('恢复')),
-        ],
-      );
-    });
+    showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            title: const Text('恢复预设源'),
+            content: Text(
+                '将恢复以下预设: ${missing.map((h) => _presetAliases[h] ?? h).join(', ')}'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('取消')),
+              TextButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _restorePresets();
+                  },
+                  child: const Text('恢复')),
+            ],
+          );
+        });
   }
 
   Future<void> _restorePresets() async {
     final toAdd = <TimeSource>[];
     if (!_sources.any((s) => s.host == _presetNtpAliyun)) {
-      toAdd.add(TimeSource.ntp(_presetNtpAliyun, alias: _presetAliases[_presetNtpAliyun] ?? ''));
+      toAdd.add(TimeSource.ntp(_presetNtpAliyun,
+          alias: _presetAliases[_presetNtpAliyun] ?? ''));
     }
     if (!_sources.any((s) => s.host == _presetNtpTencent)) {
-      toAdd.add(TimeSource.ntp(_presetNtpTencent, alias: _presetAliases[_presetNtpTencent] ?? ''));
+      toAdd.add(TimeSource.ntp(_presetNtpTencent,
+          alias: _presetAliases[_presetNtpTencent] ?? ''));
     }
     if (!_sources.any((s) => s.host == _presetHttpMeituan)) {
       toAdd.add(TimeSource.http(_presetHttpMeituan,
-          alias: _presetAliases[_presetHttpMeituan] ?? '', headers: _meituanDefaultHeaders));
+          alias: _presetAliases[_presetHttpMeituan] ?? '',
+          headers: _meituanDefaultHeaders));
     }
 
     if (toAdd.isEmpty) return;
@@ -813,7 +964,9 @@ class _HomePageState extends State<HomePage> {
                                   onChanged: (v) {
                                     if (v != null) {
                                       setState(() => _selectedIndex = v);
-                                      if (_overlayRunning) _updateOverlayForSelected();
+                                      if (_overlayRunning) {
+                                        _updateOverlayForSelected();
+                                      }
                                     }
                                   }),
                               title: Row(children: [
@@ -821,11 +974,12 @@ class _HomePageState extends State<HomePage> {
                                     child: Text(
                                         s.isSystem
                                             ? 'System'
-                                            : (s.alias.isNotEmpty ? s.alias : s.host),
-                                        style: const TextStyle(
-                                            fontFeatures: [
-                                              FontFeature.tabularFigures()
-                                            ]))),
+                                            : (s.alias.isNotEmpty
+                                                ? s.alias
+                                                : s.host),
+                                        style: const TextStyle(fontFeatures: [
+                                          FontFeature.tabularFigures()
+                                        ]))),
                                 const SizedBox(width: 8),
                                 // Small type badge to distinguish NTP vs HTTP
                                 Container(
@@ -849,10 +1003,16 @@ class _HomePageState extends State<HomePage> {
                               subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(_formatTimeForSource(s)),
-                                    if (!s.isSystem && s.lastSync != null)
-                                      Text('最近同步: ${s.lastSync}',
-                                          style: const TextStyle(fontSize: 12)),
+                                    Text(
+                                      _formatTimeForSource(s),
+                                      style: const TextStyle(
+                                        fontFeatures: [
+                                          FontFeature.tabularFigures()
+                                        ],
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.visible,
+                                    ),
                                   ]),
                               trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -879,11 +1039,17 @@ class _HomePageState extends State<HomePage> {
                                             setState(() {
                                               if (_selectedIndex == index) {
                                                 _selectedIndex = 0;
-                                              } else if (_selectedIndex > index) {
+                                              } else if (_selectedIndex >
+                                                  index) {
                                                 _selectedIndex -= 1;
                                               }
                                               _sources.removeAt(index);
                                             });
+                                            // If any tooltip overlay was showing, remove it
+                                            // to avoid dangling overlays after list changes.
+                                            if (_syncOverlayIndex != null) {
+                                              _removeSyncOverlay();
+                                            }
 
                                             // Persist the updated server list (now includes HTTP/NTP).
                                             await _saveServers();
@@ -895,10 +1061,44 @@ class _HomePageState extends State<HomePage> {
                                               await _saveHiddenPresets();
                                             }
                                           }),
+                                    // 小的感叹号图标，点击后显示内联的最近同步时间（类似 tooltip，非弹窗）
+                                    if (!s.isSystem && s.lastSync != null)
+                                      () {
+                                        final link = _layerLinks.putIfAbsent(
+                                            index, () => LayerLink());
+                                        return Padding(
+                                          padding:
+                                              const EdgeInsets.only(left: 8.0),
+                                          child: CompositedTransformTarget(
+                                            link: link,
+                                            child: Material(
+                                              color: Colors.transparent,
+                                              child: InkResponse(
+                                                radius: 18,
+                                                onTapDown: (details) =>
+                                                    _toggleSyncOverlay(
+                                                        index,
+                                                        link,
+                                                        details.globalPosition),
+                                                // provide a minimal hit area
+                                                child: const SizedBox(
+                                                  width: 20,
+                                                  height: 20,
+                                                  child: Icon(
+                                                      Icons.error_outline,
+                                                      size: 18),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }(),
                                   ]),
                               onTap: () {
                                 setState(() => _selectedIndex = index);
-                                if (_overlayRunning) _updateOverlayForSelected();
+                                if (_overlayRunning) {
+                                  _updateOverlayForSelected();
+                                }
                               },
                             );
                           },
