@@ -69,6 +69,9 @@ class FloatingClockService : Service() {
     override fun onDestroy() {
         handler.removeCallbacks(updateRunnable)
         removeOverlay()
+        val intent = Intent("io.github.amchii.floatingclock.OVERLAY_STOPPED")
+        intent.setPackage(packageName)
+        sendBroadcast(intent)
         super.onDestroy()
     }
 

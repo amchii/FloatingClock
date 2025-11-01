@@ -51,7 +51,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   static const _channel = MethodChannel('floating_clock');
 
   Timer? _uiTimer;
@@ -63,6 +63,8 @@ class _HomePageState extends State<HomePage> {
   // will clear entries from this set.
   Set<String> _hiddenPresets = <String>{};
   bool _overlayRunning = false;
+  bool _pipSupported = false;
+  bool _isInPiP = false;
   // Overlay entry used to show an inline tooltip above other widgets (doesn't
   // change layout height). Only one sync-tooltip is shown at a time.
   OverlayEntry? _syncOverlayEntry;
@@ -74,6 +76,9 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _channel.setMethodCallHandler(_handlePlatformCall);
+    _initializePlatformState();
     _sources.add(TimeSource.system());
 
     // Load persisted NTP servers and hidden preset list; then ensure presets
@@ -139,7 +144,15 @@ class _HomePageState extends State<HomePage> {
     _syncTimer?.cancel();
     // Ensure any overlay is removed
     _removeSyncOverlay();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshOverlayStatus();
+    }
   }
 
   void _removeSyncOverlay() {
@@ -253,6 +266,109 @@ class _HomePageState extends State<HomePage> {
       return;
     }
     _showSyncOverlay(index, link, tapGlobalPos);
+  }
+
+  Future<void> _initializePlatformState() async {
+    if (!Platform.isAndroid) return;
+    bool overlayRunning = _overlayRunning;
+    bool pipSupported = _pipSupported;
+    try {
+      final running =
+          await _channel.invokeMethod<bool>('isOverlayRunning');
+      if (running != null) overlayRunning = running;
+    } catch (_) {}
+    try {
+      final supported =
+          await _channel.invokeMethod<bool>('isPiPSupported');
+      if (supported != null) pipSupported = supported;
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _overlayRunning = overlayRunning;
+      _pipSupported = pipSupported;
+    });
+  }
+
+  Future<void> _refreshOverlayStatus() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final running =
+          await _channel.invokeMethod<bool>('isOverlayRunning');
+      if (!mounted) return;
+      if (running != null && running != _overlayRunning) {
+        setState(() => _overlayRunning = running);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _handlePlatformCall(MethodCall call) async {
+    switch (call.method) {
+      case 'onOverlayStopped':
+        if (mounted && _overlayRunning) {
+          setState(() => _overlayRunning = false);
+        }
+        break;
+      case 'onPiPChanged':
+        bool inPiP = false;
+        final args = call.arguments;
+        if (args is Map) {
+          final value = args['isInPiP'];
+          if (value is bool) inPiP = value;
+        } else if (args is bool) {
+          inPiP = args;
+        }
+        if (!mounted) return;
+        setState(() => _isInPiP = inPiP);
+        if (!inPiP) {
+          // When leaving PiP, refresh overlay status in case service resumed.
+          await _refreshOverlayStatus();
+        }
+        break;
+    }
+  }
+
+  Future<void> _toggleOverlay() async {
+    if (_overlayRunning) {
+      final success = await _stopOverlay();
+      if (!mounted) return;
+      if (success) {
+        setState(() => _overlayRunning = false);
+      }
+    } else {
+      final success = await _startOverlayForSelected();
+      if (!mounted) return;
+      if (success) {
+        setState(() => _overlayRunning = true);
+      }
+    }
+  }
+
+  Future<void> _enterPictureInPicture() async {
+    if (!_pipSupported) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('当前设备不支持画中画模式')));
+      return;
+    }
+    if (_overlayRunning) {
+      final stopped = await _stopOverlay();
+      if (!mounted) return;
+      if (stopped) {
+        setState(() => _overlayRunning = false);
+      }
+    }
+    try {
+      final entered = await _channel.invokeMethod<bool>('enterPiP');
+      if (entered != null && !entered) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('无法进入画中画模式，请检查系统设置')));
+      }
+    } on PlatformException catch (e) {
+      debugPrint('enterPiP failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('进入画中画失败')));
+    }
   }
 
   Future<void> _syncAllServers() async {
@@ -489,35 +605,42 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _startOverlayForSelected() async {
+  Future<bool> _startOverlayForSelected() async {
     try {
-      final bool has = await _channel.invokeMethod('hasPermission');
+      final bool has =
+          await _channel.invokeMethod<bool>('hasPermission') ?? false;
       if (!has) {
         await _channel.invokeMethod('requestPermission');
-        if (!mounted) return;
+        if (!mounted) return false;
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('请在系统设置允许“悬浮窗/在其他应用上层显示”权限后再次点击开始'),
         ));
-        return;
+        return false;
       }
       final s = _sources[_selectedIndex];
       final offset = s.isSystem ? 0 : s.offsetMillis;
       final label = s.isSystem ? '' : (s.alias.isNotEmpty ? s.alias : s.host);
       await _channel
           .invokeMethod('startOverlay', {'offset': offset, 'label': label});
-      _overlayRunning = true;
+      return true;
     } on PlatformException catch (e) {
       debugPrint('PlatformException: $e');
+    } catch (e) {
+      debugPrint('startOverlay error: $e');
     }
+    return false;
   }
 
-  Future<void> _stopOverlay() async {
+  Future<bool> _stopOverlay() async {
     try {
       await _channel.invokeMethod('stopOverlay');
-      _overlayRunning = false;
+      return true;
     } on PlatformException catch (e) {
       debugPrint('PlatformException: $e');
+    } catch (e) {
+      debugPrint('stopOverlay error: $e');
     }
+    return false;
   }
 
   // Update running overlay to reflect the currently selected source.
@@ -912,6 +1035,59 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isInPiP) {
+      final TimeSource source;
+      if (_sources.isEmpty) {
+        source = TimeSource.system();
+      } else {
+        var idx = _selectedIndex;
+        if (idx < 0) idx = 0;
+        if (idx >= _sources.length) idx = _sources.length - 1;
+        source = _sources[idx];
+      }
+      final label = source.isSystem
+          ? '系统时间'
+          : (source.alias.isNotEmpty ? source.alias : source.host);
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (!source.isSystem)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4.0),
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                            color: Colors.black54, fontSize: 14),
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  Text(
+                    _formatTimeForSource(source),
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 32,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('悬浮时间'),
@@ -1016,7 +1192,10 @@ class _HomePageState extends State<HomePage> {
                                         ),
                                       ),
                                   ]),
-                              trailing: Row(
+                              trailing: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     // 使用更紧凑的按钮设计
@@ -1122,7 +1301,7 @@ class _HomePageState extends State<HomePage> {
                                                     ? 'http'
                                                     : 'sys'),
                                             style: TextStyle(fontSize: 9 * scaleFactor))),
-                                  ]),
+                                  ])),
                               onTap: () {
                                 setState(() => _selectedIndex = index);
                                 if (_overlayRunning) {
@@ -1135,16 +1314,18 @@ class _HomePageState extends State<HomePage> {
                       ),
                       Padding(
                         padding: const EdgeInsets.all(12.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 12,
+                          runSpacing: 12,
                           children: [
                             ElevatedButton(
-                                onPressed: _startOverlayForSelected,
-                                child: const Text('开始悬浮')),
-                            const SizedBox(width: 12),
+                                onPressed: _toggleOverlay,
+                                child: Text(_overlayRunning ? '停止悬浮' : '开始悬浮')),
                             ElevatedButton(
-                                onPressed: _stopOverlay,
-                                child: const Text('停止悬浮')),
+                                onPressed:
+                                    _pipSupported ? _enterPictureInPicture : null,
+                                child: const Text('画中画')),
                           ],
                         ),
                       ),
