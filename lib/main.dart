@@ -299,13 +299,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     bool overlayRunning = _overlayRunning;
     bool pipSupported = _pipSupported;
     try {
-      final running =
-          await _channel.invokeMethod<bool>('isOverlayRunning');
+      final running = await _channel.invokeMethod<bool>('isOverlayRunning');
       if (running != null) overlayRunning = running;
     } catch (_) {}
     try {
-      final supported =
-          await _channel.invokeMethod<bool>('isPiPSupported');
+      final supported = await _channel.invokeMethod<bool>('isPiPSupported');
       if (supported != null) pipSupported = supported;
     } catch (_) {}
     if (!mounted) return;
@@ -318,8 +316,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _refreshOverlayStatus() async {
     if (!Platform.isAndroid) return;
     try {
-      final running =
-          await _channel.invokeMethod<bool>('isOverlayRunning');
+      final running = await _channel.invokeMethod<bool>('isOverlayRunning');
       if (!mounted) return;
       if (running != null && running != _overlayRunning) {
         setState(() => _overlayRunning = running);
@@ -371,8 +368,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _enterPictureInPicture() async {
     if (!_pipSupported) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('当前设备不支持画中画模式')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('当前设备不支持画中画模式')));
       return;
     }
     if (_overlayRunning) {
@@ -386,14 +383,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       final entered = await _channel.invokeMethod<bool>('enterPiP');
       if (entered != null && !entered) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('无法进入画中画模式，请检查系统设置')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('无法进入画中画模式，请检查系统设置')));
       }
     } on PlatformException catch (e) {
       debugPrint('enterPiP failed: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('进入画中画失败')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('进入画中画失败')));
     }
   }
 
@@ -843,12 +840,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         });
   }
 
-  String _formatTimeForSource(TimeSource s) {
+  ({String prefix, String fraction}) _timePartsForSource(TimeSource s) {
     final now = DateTime.now().add(Duration(milliseconds: s.offsetMillis));
     final fraction = _timePrecision == TimePrecision.centisecond
         ? (now.millisecond ~/ 10).toString().padLeft(2, '0')
         : (now.millisecond ~/ 100).toString();
-    return '${_twoDigits(now.hour)}:${_twoDigits(now.minute)}:${_twoDigits(now.second)}.$fraction';
+    final prefix =
+        '${_twoDigits(now.hour)}:${_twoDigits(now.minute)}:${_twoDigits(now.second)}';
+    return (prefix: prefix, fraction: fraction);
   }
 
   String _precisionLabel(TimePrecision precision) {
@@ -878,12 +877,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ? const Duration(milliseconds: 10)
       : const Duration(milliseconds: 100);
 
+  Widget _buildColoredTimeText(TimeSource s,
+      {TextStyle? style, TextAlign? textAlign}) {
+    final parts = _timePartsForSource(s);
+    final fractionStyle =
+        (style ?? const TextStyle()).copyWith(color: Colors.red);
+    return Text.rich(
+        TextSpan(children: [
+          TextSpan(text: '${parts.prefix}.'),
+          TextSpan(text: parts.fraction, style: fractionStyle),
+        ]),
+        style: style,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: textAlign);
+  }
+
   // Persistence helpers
   Future<void> _loadSavedServers() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final loadedPrecision = _precisionFromStorage(
-          prefs.getString(_precisionPrefKey));
+      final loadedPrecision =
+          _precisionFromStorage(prefs.getString(_precisionPrefKey));
       if (loadedPrecision != _timePrecision) {
         setState(() => _timePrecision = loadedPrecision);
       }
@@ -1123,8 +1138,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         maxLines: 1,
                       ),
                     ),
-                  Text(
-                    _formatTimeForSource(source),
+                  _buildColoredTimeText(
+                    source,
                     style: const TextStyle(
                       color: Colors.black,
                       fontSize: 32,
@@ -1213,9 +1228,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           itemBuilder: (context, index) {
                             final s = _sources[index];
                             // Get text scale factor for responsive adjustments
-                            final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+                            final textScale =
+                                MediaQuery.textScalerOf(context).scale(1.0);
                             // Scale down spacing when text is enlarged
-                            final scaleFactor = textScale > 1.2 ? 0.7 : (textScale > 1.0 ? 0.85 : 1.0);
+                            final scaleFactor = textScale > 1.2
+                                ? 0.7
+                                : (textScale > 1.0 ? 0.85 : 1.0);
                             final iconSize = 20.0 * scaleFactor;
                             final buttonPadding = 8.0 * scaleFactor;
 
@@ -1232,36 +1250,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     }
                                   }),
                               title: Text(
-                                  s.isSystem
-                                      ? 'System'
-                                      : (s.alias.isNotEmpty
-                                          ? s.alias
-                                          : s.host),
-                                  style: const TextStyle(
-                                    fontFeatures: [
-                                      FontFeature.tabularFigures()
-                                    ],
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                s.isSystem
+                                    ? 'System'
+                                    : (s.alias.isNotEmpty ? s.alias : s.host),
+                                style: const TextStyle(
+                                  fontFeatures: [FontFeature.tabularFigures()],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                               subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      _formatTimeForSource(s),
+                                    _buildColoredTimeText(
+                                      s,
                                       style: const TextStyle(
                                         fontFeatures: [
                                           FontFeature.tabularFigures()
                                         ],
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
                                     ),
                                     // 偏移值移到第二行
                                     if (!s.isSystem)
                                       Padding(
-                                        padding: const EdgeInsets.only(top: 2.0),
+                                        padding:
+                                            const EdgeInsets.only(top: 2.0),
                                         child: Text(
                                           _formatOffset(s.offsetMillis),
                                           style: TextStyle(
@@ -1275,112 +1288,137 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                   fit: BoxFit.scaleDown,
                                   alignment: Alignment.centerRight,
                                   child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // 使用更紧凑的按钮设计
-                                    if (s.type == TimeSourceType.ntp)
-                                      Material(
-                                        color: Colors.transparent,
-                                        child: InkWell(
-                                          borderRadius: BorderRadius.circular(20),
-                                          onTap: () => _editServerDialog(index),
-                                          child: Padding(
-                                            padding: EdgeInsets.all(buttonPadding),
-                                            child: Icon(Icons.edit, size: iconSize),
-                                          ),
-                                        ),
-                                      )
-                                    else if (!s.isSystem)
-                                      SizedBox(width: iconSize + buttonPadding * 2),
-                                    if (!s.isSystem)
-                                      Material(
-                                        color: Colors.transparent,
-                                        child: InkWell(
-                                          borderRadius: BorderRadius.circular(20),
-                                          onTap: () async {
-                                            final removed = _sources[index];
-                                            final removedHost = removed.host;
-                                            setState(() {
-                                              if (_selectedIndex == index) {
-                                                _selectedIndex = 0;
-                                              } else if (_selectedIndex >
-                                                  index) {
-                                                _selectedIndex -= 1;
-                                              }
-                                              _sources.removeAt(index);
-                                            });
-                                            // If any tooltip overlay was showing, remove it
-                                            // to avoid dangling overlays after list changes.
-                                            if (_syncOverlayIndex != null) {
-                                              _removeSyncOverlay();
-                                            }
-
-                                            // Persist the updated server list (now includes HTTP/NTP).
-                                            await _saveServers();
-
-                                            // If the removed host is a preset, mark it hidden
-                                            // so it won't be re-added on next startup.
-                                            if (_isPresetHost(removedHost)) {
-                                              _hiddenPresets.add(removedHost);
-                                              await _saveHiddenPresets();
-                                            }
-                                          },
-                                          child: Padding(
-                                            padding: EdgeInsets.all(buttonPadding),
-                                            child: Icon(Icons.delete, size: iconSize),
-                                          ),
-                                        ),
-                                      ),
-                                    // 同步时间图标
-                                    if (!s.isSystem && s.lastSync != null)
-                                      () {
-                                        final link = _layerLinks.putIfAbsent(
-                                            index, () => LayerLink());
-                                        return CompositedTransformTarget(
-                                          link: link,
-                                          child: Material(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // 使用更紧凑的按钮设计
+                                        if (s.type == TimeSourceType.ntp)
+                                          Material(
                                             color: Colors.transparent,
-                                            child: InkResponse(
-                                              radius: iconSize * 0.9,
-                                              onTapDown: (details) =>
-                                                  _toggleSyncOverlay(
-                                                      index,
-                                                      link,
-                                                      details.globalPosition),
-                                              child: SizedBox(
-                                                width: iconSize + buttonPadding * 2,
-                                                height: iconSize + buttonPadding * 2,
-                                                child: Icon(
-                                                    Icons.error_outline,
-                                                    size: iconSize * 0.9),
+                                            child: InkWell(
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                              onTap: () =>
+                                                  _editServerDialog(index),
+                                              child: Padding(
+                                                padding: EdgeInsets.all(
+                                                    buttonPadding),
+                                                child: Icon(Icons.edit,
+                                                    size: iconSize),
+                                              ),
+                                            ),
+                                          )
+                                        else if (!s.isSystem)
+                                          SizedBox(
+                                              width:
+                                                  iconSize + buttonPadding * 2),
+                                        if (!s.isSystem)
+                                          Material(
+                                            color: Colors.transparent,
+                                            child: InkWell(
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                              onTap: () async {
+                                                final removed = _sources[index];
+                                                final removedHost =
+                                                    removed.host;
+                                                setState(() {
+                                                  if (_selectedIndex == index) {
+                                                    _selectedIndex = 0;
+                                                  } else if (_selectedIndex >
+                                                      index) {
+                                                    _selectedIndex -= 1;
+                                                  }
+                                                  _sources.removeAt(index);
+                                                });
+                                                // If any tooltip overlay was showing, remove it
+                                                // to avoid dangling overlays after list changes.
+                                                if (_syncOverlayIndex != null) {
+                                                  _removeSyncOverlay();
+                                                }
+
+                                                // Persist the updated server list (now includes HTTP/NTP).
+                                                await _saveServers();
+
+                                                // If the removed host is a preset, mark it hidden
+                                                // so it won't be re-added on next startup.
+                                                if (_isPresetHost(
+                                                    removedHost)) {
+                                                  _hiddenPresets
+                                                      .add(removedHost);
+                                                  await _saveHiddenPresets();
+                                                }
+                                              },
+                                              child: Padding(
+                                                padding: EdgeInsets.all(
+                                                    buttonPadding),
+                                                child: Icon(Icons.delete,
+                                                    size: iconSize),
                                               ),
                                             ),
                                           ),
-                                        );
-                                      }()
-                                    else if (!s.isSystem)
-                                      SizedBox(width: iconSize + buttonPadding * 2),
-                                    // 类型标签
-                                    Container(
-                                        margin: EdgeInsets.only(left: 4.0 * scaleFactor),
-                                        padding: EdgeInsets.symmetric(
-                                            horizontal: 4 * scaleFactor,
-                                            vertical: 1 * scaleFactor),
-                                        decoration: BoxDecoration(
-                                            color: s.type == TimeSourceType.ntp
-                                                ? Colors.blue.shade50
-                                                : (s.type == TimeSourceType.http
-                                                    ? Colors.green.shade50
-                                                    : Colors.grey.shade200),
-                                            borderRadius: BorderRadius.circular(4)),
-                                        child: Text(
-                                            s.type == TimeSourceType.ntp
-                                                ? 'ntp'
-                                                : (s.type == TimeSourceType.http
-                                                    ? 'http'
-                                                    : 'sys'),
-                                            style: TextStyle(fontSize: 9 * scaleFactor))),
-                                  ])),
+                                        // 同步时间图标
+                                        if (!s.isSystem && s.lastSync != null)
+                                          () {
+                                            final link =
+                                                _layerLinks.putIfAbsent(
+                                                    index, () => LayerLink());
+                                            return CompositedTransformTarget(
+                                              link: link,
+                                              child: Material(
+                                                color: Colors.transparent,
+                                                child: InkResponse(
+                                                  radius: iconSize * 0.9,
+                                                  onTapDown: (details) =>
+                                                      _toggleSyncOverlay(
+                                                          index,
+                                                          link,
+                                                          details
+                                                              .globalPosition),
+                                                  child: SizedBox(
+                                                    width: iconSize +
+                                                        buttonPadding * 2,
+                                                    height: iconSize +
+                                                        buttonPadding * 2,
+                                                    child: Icon(
+                                                        Icons.error_outline,
+                                                        size: iconSize * 0.9),
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          }()
+                                        else if (!s.isSystem)
+                                          SizedBox(
+                                              width:
+                                                  iconSize + buttonPadding * 2),
+                                        // 类型标签
+                                        Container(
+                                            margin: EdgeInsets.only(
+                                                left: 4.0 * scaleFactor),
+                                            padding: EdgeInsets.symmetric(
+                                                horizontal: 4 * scaleFactor,
+                                                vertical: 1 * scaleFactor),
+                                            decoration: BoxDecoration(
+                                                color: s.type ==
+                                                        TimeSourceType.ntp
+                                                    ? Colors.blue.shade50
+                                                    : (s.type ==
+                                                            TimeSourceType.http
+                                                        ? Colors.green.shade50
+                                                        : Colors.grey.shade200),
+                                                borderRadius:
+                                                    BorderRadius.circular(4)),
+                                            child: Text(
+                                                s.type == TimeSourceType.ntp
+                                                    ? 'ntp'
+                                                    : (s.type ==
+                                                            TimeSourceType.http
+                                                        ? 'http'
+                                                        : 'sys'),
+                                                style: TextStyle(
+                                                    fontSize:
+                                                        9 * scaleFactor))),
+                                      ])),
                               onTap: () {
                                 setState(() => _selectedIndex = index);
                                 if (_overlayRunning) {
@@ -1402,8 +1440,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                 onPressed: _toggleOverlay,
                                 child: Text(_overlayRunning ? '停止悬浮' : '开始悬浮')),
                             ElevatedButton(
-                                onPressed:
-                                    _pipSupported ? _enterPictureInPicture : null,
+                                onPressed: _pipSupported
+                                    ? _enterPictureInPicture
+                                    : null,
                                 child: const Text('画中画')),
                           ],
                         ),

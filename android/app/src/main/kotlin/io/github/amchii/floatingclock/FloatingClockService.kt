@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.graphics.Color
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -19,6 +20,9 @@ import android.view.WindowManager
 import android.widget.TextView
 import android.widget.LinearLayout
 import android.text.TextUtils
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.graphics.drawable.GradientDrawable
 import android.graphics.Typeface
 import androidx.core.app.NotificationCompat
@@ -153,7 +157,7 @@ class FloatingClockService : Service() {
         tv.textSize = 20f
         tv.isSingleLine = true
         tv.ellipsize = TextUtils.TruncateAt.END
-        tv.text = currentTimeString()
+        tv.text = currentTimeText()
 
         val tvLp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         tvLp.weight = 1f
@@ -239,7 +243,7 @@ class FloatingClockService : Service() {
 
     private fun updateTime() {
         textView?.post {
-            textView?.text = currentTimeString()
+            textView?.text = currentTimeText()
             val aliasTv = containerView?.tag as? TextView
             aliasTv?.text = label ?: ""
             // ensure marquee is (re-)enabled
@@ -247,7 +251,7 @@ class FloatingClockService : Service() {
         }
     }
 
-    private fun currentTimeString(): String {
+    private fun currentTimeText(): CharSequence {
         val nowMs = System.currentTimeMillis() + offsetMillis
         val cal = Calendar.getInstance()
         cal.timeInMillis = nowMs
@@ -260,8 +264,19 @@ class FloatingClockService : Service() {
         } else {
             (cal.get(Calendar.MILLISECOND) / 100).toString()
         }
+        val display = "$base.$fraction"
+        val spannable = SpannableString(display)
+        val dotIndex = display.lastIndexOf('.')
+        if (dotIndex in 0 until display.length - 1) {
+            spannable.setSpan(
+                ForegroundColorSpan(Color.RED),
+                dotIndex + 1,
+                display.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
         // Overlay should show only the time (no alias), keep it compact.
-        return "$base.$fraction"
+        return spannable
     }
 
     private fun applyPrecision(raw: String?) {
