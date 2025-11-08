@@ -32,11 +32,13 @@ class FloatingClockService : Service() {
     // offset in milliseconds to apply to system time (ntpTime - systemTime)
     private var offsetMillis: Long = 0L
     private var label: String? = null
+    private var displayPrecision = DisplayPrecision.CENTISECOND
+    private var updateIntervalMs = 10L
     private val handler = Handler(Looper.getMainLooper())
     private val updateRunnable = object : Runnable {
         override fun run() {
             updateTime()
-            handler.postDelayed(this, 10)
+            handler.postDelayed(this, updateIntervalMs)
         }
     }
 
@@ -54,7 +56,8 @@ class FloatingClockService : Service() {
         intent?.let {
             offsetMillis = it.getLongExtra("offset", 0L)
             label = it.getStringExtra("label")
-        }
+            applyPrecision(it.getStringExtra("precision"))
+        } ?: applyPrecision(null)
         startForegroundWithNotification()
         // Avoid scheduling multiple update runnables when startOverlay is
         // invoked repeatedly to update the offset/label; remove previous
@@ -251,9 +254,27 @@ class FloatingClockService : Service() {
         val h = cal.get(Calendar.HOUR_OF_DAY)
         val m = cal.get(Calendar.MINUTE)
         val s = cal.get(Calendar.SECOND)
-        val centis = cal.get(Calendar.MILLISECOND) / 10
-        val base = String.format(Locale.getDefault(), "%02d:%02d:%02d.%02d", h, m, s, centis)
+        val base = String.format(Locale.getDefault(), "%02d:%02d:%02d", h, m, s)
+        val fraction = if (displayPrecision == DisplayPrecision.CENTISECOND) {
+            String.format(Locale.getDefault(), "%02d", cal.get(Calendar.MILLISECOND) / 10)
+        } else {
+            (cal.get(Calendar.MILLISECOND) / 100).toString()
+        }
         // Overlay should show only the time (no alias), keep it compact.
-        return base
+        return "$base.$fraction"
     }
+
+    private fun applyPrecision(raw: String?) {
+        val newPrecision = when (raw) {
+            "decisecond" -> DisplayPrecision.DECISECOND
+            else -> DisplayPrecision.CENTISECOND
+        }
+        displayPrecision = newPrecision
+        updateIntervalMs = if (newPrecision == DisplayPrecision.CENTISECOND) 10L else 100L
+    }
+}
+
+private enum class DisplayPrecision {
+    CENTISECOND,
+    DECISECOND
 }

@@ -24,6 +24,7 @@ const Map<String, String> _meituanDefaultHeaders = {
       'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36'
 };
 const String _timeSourcesKey = 'time_sources_json';
+const String _precisionPrefKey = 'time_precision';
 
 void main() {
   runApp(const MyApp());
@@ -65,6 +66,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _overlayRunning = false;
   bool _pipSupported = false;
   bool _isInPiP = false;
+  TimePrecision _timePrecision = TimePrecision.centisecond;
   // Overlay entry used to show an inline tooltip above other widgets (doesn't
   // change layout height). Only one sync-tooltip is shown at a time.
   OverlayEntry? _syncOverlayEntry;
@@ -130,8 +132,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         }
       }
 
-      _uiTimer = Timer.periodic(
-          const Duration(milliseconds: 10), (_) => setState(() {}));
+      _restartUiTimer();
       _syncAllServers();
       _syncTimer =
           Timer.periodic(const Duration(seconds: 60), (_) => _syncAllServers());
@@ -153,6 +154,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _refreshOverlayStatus();
     }
+  }
+
+  void _restartUiTimer() {
+    _uiTimer?.cancel();
+    _uiTimer = Timer.periodic(_uiTickDuration, (_) {
+      if (!mounted) return;
+      setState(() {});
+    });
+  }
+
+  void _onPrecisionChanged(TimePrecision precision) {
+    if (_timePrecision == precision) return;
+    setState(() => _timePrecision = precision);
+    _restartUiTimer();
+    unawaited(_persistPrecision(precision));
+    if (_overlayRunning) {
+      _updateOverlayForSelected();
+    }
+  }
+
+  Future<void> _persistPrecision(TimePrecision precision) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_precisionPrefKey, precision.storageValue);
+    } catch (_) {}
   }
 
   void _removeSyncOverlay() {
@@ -620,8 +646,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       final s = _sources[_selectedIndex];
       final offset = s.isSystem ? 0 : s.offsetMillis;
       final label = s.isSystem ? '' : (s.alias.isNotEmpty ? s.alias : s.host);
-      await _channel
-          .invokeMethod('startOverlay', {'offset': offset, 'label': label});
+      await _channel.invokeMethod('startOverlay', {
+        'offset': offset,
+        'label': label,
+        'precision': _timePrecision.storageValue,
+      });
       return true;
     } on PlatformException catch (e) {
       debugPrint('PlatformException: $e');
@@ -650,8 +679,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       final s = _sources[_selectedIndex];
       final offset = s.isSystem ? 0 : s.offsetMillis;
       final label = s.isSystem ? '' : (s.alias.isNotEmpty ? s.alias : s.host);
-      await _channel
-          .invokeMethod('startOverlay', {'offset': offset, 'label': label});
+      await _channel.invokeMethod('startOverlay', {
+        'offset': offset,
+        'label': label,
+        'precision': _timePrecision.storageValue,
+      });
     } on PlatformException catch (e) {
       debugPrint('PlatformException: $e');
     }
@@ -813,8 +845,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   String _formatTimeForSource(TimeSource s) {
     final now = DateTime.now().add(Duration(milliseconds: s.offsetMillis));
-    final centis = (now.millisecond ~/ 10).toString().padLeft(2, '0');
-    return '${_twoDigits(now.hour)}:${_twoDigits(now.minute)}:${_twoDigits(now.second)}.$centis';
+    final fraction = _timePrecision == TimePrecision.centisecond
+        ? (now.millisecond ~/ 10).toString().padLeft(2, '0')
+        : (now.millisecond ~/ 100).toString();
+    return '${_twoDigits(now.hour)}:${_twoDigits(now.minute)}:${_twoDigits(now.second)}.$fraction';
+  }
+
+  String _precisionLabel(TimePrecision precision) {
+    switch (precision) {
+      case TimePrecision.centisecond:
+        return '0.01 秒';
+      case TimePrecision.decisecond:
+        return '0.1 秒';
+    }
   }
 
   String _formatLastSync(DateTime? dt) {
@@ -831,10 +874,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return '${ms >= 0 ? '+' : '-'}${s.toStringAsFixed(2)} s';
   }
 
+  Duration get _uiTickDuration => _timePrecision == TimePrecision.centisecond
+      ? const Duration(milliseconds: 10)
+      : const Duration(milliseconds: 100);
+
   // Persistence helpers
   Future<void> _loadSavedServers() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final loadedPrecision = _precisionFromStorage(
+          prefs.getString(_precisionPrefKey));
+      if (loadedPrecision != _timePrecision) {
+        setState(() => _timePrecision = loadedPrecision);
+      }
       // First try unified format (all sources)
       final rawAll = prefs.getString(_timeSourcesKey);
       if (rawAll != null && rawAll.isNotEmpty) {
@@ -1127,6 +1179,33 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                               onPressed: _restorePresetsDialog),
                         ]),
                       ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0, vertical: 4.0),
+                        child: Row(
+                          children: [
+                            const Text('显示精度'),
+                            const Spacer(),
+                            DropdownButtonHideUnderline(
+                              child: DropdownButton<TimePrecision>(
+                                value: _timePrecision,
+                                isDense: true,
+                                items: TimePrecision.values
+                                    .map((p) => DropdownMenuItem(
+                                          value: p,
+                                          child: Text(_precisionLabel(p)),
+                                        ))
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    _onPrecisionChanged(value);
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       Expanded(
                         child: ListView.separated(
                           itemCount: _sources.length,
@@ -1339,6 +1418,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
   }
+}
+
+enum TimePrecision { centisecond, decisecond }
+
+extension TimePrecisionPrefs on TimePrecision {
+  String get storageValue =>
+      this == TimePrecision.centisecond ? 'centisecond' : 'decisecond';
+}
+
+TimePrecision _precisionFromStorage(String? raw) {
+  if (raw == TimePrecision.decisecond.storageValue) {
+    return TimePrecision.decisecond;
+  }
+  return TimePrecision.centisecond;
 }
 
 enum TimeSourceType { system, ntp, http }
