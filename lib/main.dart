@@ -1198,24 +1198,44 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16.0, vertical: 4.0),
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             const Text('显示精度'),
-                            const Spacer(),
-                            DropdownButtonHideUnderline(
-                              child: DropdownButton<TimePrecision>(
-                                value: _timePrecision,
-                                isDense: true,
-                                items: TimePrecision.values
-                                    .map((p) => DropdownMenuItem(
-                                          value: p,
-                                          child: Text(_precisionLabel(p)),
-                                        ))
-                                    .toList(),
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    _onPrecisionChanged(value);
-                                  }
-                                },
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: Wrap(
+                                  alignment: WrapAlignment.end,
+                                  spacing: 12,
+                                  runSpacing: 4,
+                                  children: TimePrecision.values.map((p) {
+                                    return InkWell(
+                                      borderRadius: BorderRadius.circular(24),
+                                      onTap: () => _onPrecisionChanged(p),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Radio<TimePrecision>(
+                                            value: p,
+                                            groupValue: _timePrecision,
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            materialTapTargetSize:
+                                                MaterialTapTargetSize
+                                                    .shrinkWrap,
+                                            onChanged: (value) {
+                                              if (value != null) {
+                                                _onPrecisionChanged(value);
+                                              }
+                                            },
+                                          ),
+                                          Text(_precisionLabel(p)),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
                               ),
                             ),
                           ],
