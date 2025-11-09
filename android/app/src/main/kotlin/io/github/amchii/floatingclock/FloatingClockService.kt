@@ -38,6 +38,7 @@ class FloatingClockService : Service() {
     private var label: String? = null
     private var displayPrecision = DisplayPrecision.CENTISECOND
     private var updateIntervalMs = 10L
+    private var fractionColor: Int = Color.parseColor("#C62828")
     private val handler = Handler(Looper.getMainLooper())
     private val updateRunnable = object : Runnable {
         override fun run() {
@@ -61,6 +62,7 @@ class FloatingClockService : Service() {
             offsetMillis = it.getLongExtra("offset", 0L)
             label = it.getStringExtra("label")
             applyPrecision(it.getStringExtra("precision"))
+            fractionColor = it.getIntExtra("fractionColor", fractionColor)
         } ?: applyPrecision(null)
         startForegroundWithNotification()
         // Avoid scheduling multiple update runnables when startOverlay is
@@ -269,7 +271,7 @@ class FloatingClockService : Service() {
         val dotIndex = display.lastIndexOf('.')
         if (dotIndex in 0 until display.length - 1) {
             spannable.setSpan(
-                ForegroundColorSpan(Color.RED),
+                ForegroundColorSpan(fractionColor),
                 dotIndex + 1,
                 display.length,
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE

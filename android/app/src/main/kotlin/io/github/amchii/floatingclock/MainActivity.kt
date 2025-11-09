@@ -126,11 +126,14 @@ class MainActivity : FlutterActivity() {
                     val offset = offsetNum?.toLong() ?: 0L
                     val label = call.argument<String>("label")
                     val precision = call.argument<String>("precision")
+                    val fractionColorNum = call.argument<Number>("fractionColor")
+                    val fractionColor = fractionColorNum?.toInt()
 
                     val intent = Intent(this, FloatingClockService::class.java)
                     intent.putExtra("offset", offset)
                     if (label != null) intent.putExtra("label", label)
                     if (precision != null) intent.putExtra("precision", precision)
+                    if (fractionColor != null) intent.putExtra("fractionColor", fractionColor)
 
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         startForegroundService(intent)

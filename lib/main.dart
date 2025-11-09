@@ -25,6 +25,22 @@ const Map<String, String> _meituanDefaultHeaders = {
 };
 const String _timeSourcesKey = 'time_sources_json';
 const String _precisionPrefKey = 'time_precision';
+const String _fractionColorPrefKey = 'fraction_color';
+
+class _FractionColorOption {
+  final String key;
+  final String label;
+  final Color color;
+  const _FractionColorOption(this.key, this.label, this.color);
+}
+
+const List<_FractionColorOption> _fractionColorOptions = [
+  _FractionColorOption('deep_red', '暗红', Color(0xFFC62828)),
+  _FractionColorOption('amber', '琥珀', Color(0xFFEF6C00)),
+  _FractionColorOption('teal', '青绿', Color(0xFF00796B)),
+  _FractionColorOption('indigo', '靛蓝', Color(0xFF3949AB)),
+  _FractionColorOption('purple', '紫罗兰', Color(0xFF8E24AA)),
+];
 
 void main() {
   runApp(const MyApp());
@@ -67,6 +83,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _pipSupported = false;
   bool _isInPiP = false;
   TimePrecision _timePrecision = TimePrecision.centisecond;
+  String _fractionColorKey = _fractionColorOptions.first.key;
   // Overlay entry used to show an inline tooltip above other widgets (doesn't
   // change layout height). Only one sync-tooltip is shown at a time.
   OverlayEntry? _syncOverlayEntry;
@@ -180,6 +197,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await prefs.setString(_precisionPrefKey, precision.storageValue);
     } catch (_) {}
   }
+
+  void _onFractionColorChanged(String key) {
+    if (_fractionColorKey == key) return;
+    setState(() => _fractionColorKey = key);
+    unawaited(_persistFractionColor(key));
+    if (_overlayRunning) {
+      _updateOverlayForSelected();
+    }
+  }
+
+  Future<void> _persistFractionColor(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_fractionColorPrefKey, key);
+    } catch (_) {}
+  }
+
+  _FractionColorOption get _fractionColorOption =>
+      _fractionColorOptions.firstWhere(
+          (opt) => opt.key == _fractionColorKey,
+          orElse: () => _fractionColorOptions.first);
+
+  Color get _fractionColor => _fractionColorOption.color;
 
   void _removeSyncOverlay() {
     try {
@@ -647,6 +687,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         'offset': offset,
         'label': label,
         'precision': _timePrecision.storageValue,
+        'fractionColor': _fractionColor.toARGB32(),
       });
       return true;
     } on PlatformException catch (e) {
@@ -680,6 +721,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         'offset': offset,
         'label': label,
         'precision': _timePrecision.storageValue,
+        'fractionColor': _fractionColor.toARGB32(),
       });
     } on PlatformException catch (e) {
       debugPrint('PlatformException: $e');
@@ -881,7 +923,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       {TextStyle? style, TextAlign? textAlign}) {
     final parts = _timePartsForSource(s);
     final fractionStyle =
-        (style ?? const TextStyle()).copyWith(color: Colors.red);
+        (style ?? const TextStyle()).copyWith(color: _fractionColor);
     return Text.rich(
         TextSpan(children: [
           TextSpan(text: '${parts.prefix}.'),
@@ -897,6 +939,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _loadSavedServers() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final savedColor = prefs.getString(_fractionColorPrefKey);
+      if (savedColor != null &&
+          _fractionColorOptions.any((opt) => opt.key == savedColor)) {
+        setState(() => _fractionColorKey = savedColor);
+      }
       final loadedPrecision =
           _precisionFromStorage(prefs.getString(_precisionPrefKey));
       if (loadedPrecision != _timePrecision) {
@@ -1197,46 +1244,101 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16.0, vertical: 4.0),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('显示精度'),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: Wrap(
-                                  alignment: WrapAlignment.end,
-                                  spacing: 12,
-                                  runSpacing: 4,
-                                  children: TimePrecision.values.map((p) {
-                                    return InkWell(
-                                      borderRadius: BorderRadius.circular(24),
-                                      onTap: () => _onPrecisionChanged(p),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Radio<TimePrecision>(
-                                            value: p,
-                                            groupValue: _timePrecision,
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            materialTapTargetSize:
-                                                MaterialTapTargetSize
-                                                    .shrinkWrap,
-                                            onChanged: (value) {
-                                              if (value != null) {
-                                                _onPrecisionChanged(value);
-                                              }
-                                            },
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const Text('显示精度'),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Wrap(
+                                      alignment: WrapAlignment.end,
+                                      spacing: 12,
+                                      runSpacing: 4,
+                                      children: TimePrecision.values.map((p) {
+                                        return InkWell(
+                                          borderRadius: BorderRadius.circular(24),
+                                          onTap: () => _onPrecisionChanged(p),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Radio<TimePrecision>(
+                                                value: p,
+                                                groupValue: _timePrecision,
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                materialTapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
+                                                onChanged: (value) {
+                                                  if (value != null) {
+                                                    _onPrecisionChanged(value);
+                                                  }
+                                                },
+                                              ),
+                                              Text(_precisionLabel(p)),
+                                            ],
                                           ),
-                                          Text(_precisionLabel(p)),
-                                        ],
-                                      ),
-                                    );
-                                  }).toList(),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const Text('小数颜色'),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: _fractionColorKey,
+                                        isDense: true,
+                                        alignment: Alignment.centerRight,
+                                        items: _fractionColorOptions
+                                            .map((option) => DropdownMenuItem(
+                                                  value: option.key,
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Container(
+                                                        width: 12,
+                                                        height: 12,
+                                                        margin:
+                                                            const EdgeInsets.only(
+                                                                right: 6),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                                color:
+                                                                    option.color,
+                                                                shape: BoxShape
+                                                                    .circle),
+                                                      ),
+                                                      Text(option.label),
+                                                    ],
+                                                  ),
+                                                ))
+                                            .toList(),
+                                        onChanged: (value) {
+                                          if (value != null) {
+                                            _onFractionColorChanged(value);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
