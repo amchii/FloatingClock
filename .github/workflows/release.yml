@@ -110,6 +110,21 @@ jobs:
           name: app-release-apk
           path: build/app/outputs/apk/release/
 
+      - name: Rename APK files for release
+        run: |
+          cd build/app/outputs/apk/release
+          shopt -s nullglob
+          files=(app-*-release.apk)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No APK files found to rename"
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            abi="${file#app-}"
+            abi="${abi%-release.apk}"
+            mv "$file" "FloatingClock-android-${abi}.apk"
+          done
+
       - name: Create GitHub release and upload APK
         uses: softprops/action-gh-release@v2
         with:
